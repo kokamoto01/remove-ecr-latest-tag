@@ -1,12 +1,12 @@
 #!/bin/bash
 #
-# ECR の全リポジトリから latest タグを一律で削除するスクリプト
+# ECR の全リポジトリから latest タグを一律で削除するスクリプト（指定したリポジトリは除外）
 #
 # Usage:
 #   ./script/delete-all-ecr-latest-tags.sh [OPTIONS]
 #
 # Options:
-#   --profile NAME      AWS プロファイル (default: YOUR_PROFILE)
+#   --profile NAME      AWS プロファイル (default: mafin)
 #   --region REGION     AWS リージョン (default: ap-northeast-1)
 #   --target LIST       削除対象のリポジトリ名（カンマ区切りで複数指定可。ワイルドカード対応。指定時は対象のみ処理）
 #   --exclude LIST      削除対象から除外するリポジトリ名（カンマ区切りで複数指定可。ワイルドカード対応）
@@ -17,7 +17,7 @@
 set -eu
 
 readonly TAG_LATEST="latest"
-AWS_PROFILE="YOUR_PROFILE"
+AWS_PROFILE="mafin"
 REGION="ap-northeast-1"
 TARGET_REPOS=()
 EXCLUDE_REPOS=()
@@ -118,25 +118,22 @@ fi
 DELETED_COUNT=0
 
 for repo in "${REPO_NAMES[@]}"; do
-  digest=$(aws_ecr describe-images \
+  if ! aws_ecr describe-images \
     --repository-name "$repo" \
     --image-ids imageTag="$TAG_LATEST" \
-    --query 'imageDetails[0].imageDigest' \
-    --output text 2>/dev/null || true)
-
-  if [[ -z "$digest" || "$digest" == "None" ]]; then
+    --output text &>/dev/null; then
     continue
   fi
 
   if [[ "$DRY_RUN" == true ]]; then
-    echo "[dry-run] Would delete: $repo (tag: $TAG_LATEST, digest: $digest)"
+    echo "[dry-run] Would delete: $repo (tag: $TAG_LATEST)"
     ((DELETED_COUNT++)) || true
     continue
   fi
 
   if aws_ecr batch-delete-image \
     --repository-name "$repo" \
-    --image-ids imageDigest="$digest"; then
+    --image-ids imageTag="$TAG_LATEST"; then
     echo "Deleted: $repo (tag: $TAG_LATEST)"
     ((DELETED_COUNT++)) || true
   else
